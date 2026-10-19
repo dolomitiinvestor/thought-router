@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thought Router</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Router">
+<meta name="theme-color" content="#1f2a44">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e3e1da;
+    --accent: #1f2a44; --journal: #7a5af5; --todo: #1f8f5f; --agent: #d9692b; --err: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121316; --card: #1c1d21; --ink: #ececef; --muted: #9a9aa2; --line: #2c2d33; --accent: #c9d3f0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 560px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  .icon-btn { background: none; border: 0; color: var(--muted); font-size: 22px; padding: 6px; cursor: pointer; }
+  textarea { width: 100%; min-height: 160px; resize: vertical; padding: 14px; font: inherit; font-size: 17px;
+    background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .send { width: 100%; margin-top: 10px; padding: 14px; font: inherit; font-weight: 600; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--bg); cursor: pointer; }
+  .routes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .routes button { padding: 11px 4px; font: inherit; font-size: 15px; border-radius: 12px; cursor: pointer;
+    background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+  .routes button[data-route=journal] { border-color: var(--journal); color: var(--journal); }
+  .routes button[data-route=todo] { border-color: var(--todo); color: var(--todo); }
+  .routes button[data-route=agent] { border-color: var(--agent); color: var(--agent); }
+  button:disabled { opacity: .5; }
+  #status { min-height: 22px; margin: 10px 2px; color: var(--muted); font-size: 14px; }
+  #status.err { color: var(--err); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 2px 8px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  li a { color: inherit; text-decoration: none; display: block; }
+  .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .tag { font-weight: 600; }
+  .tag.journal { color: var(--journal); } .tag.todo { color: var(--todo); } .tag.agent { color: var(--agent); } .tag.error { color: var(--err); }
+  dialog { border: 1px solid var(--line); border-radius: 16px; background: var(--card); color: var(--ink); width: min(92vw, 440px); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  label { display: block; font-size: 14px; margin: 10px 0 4px; }
+  input { width: 100%; padding: 10px; font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .hint { font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .row button { padding: 9px 16px; border-radius: 10px; font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .row button.primary { background: var(--accent); color: var(--bg); border: 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Thought Router</h1>
+    <button class="icon-btn" id="openSettings" aria-label="Settings">⚙︎</button>
+  </header>
+
+  <textarea id="text" placeholder="What's on your mind?" autofocus></textarea>
+  <button class="send" data-route="">Send (Claude decides)</button>
+  <div class="routes">
+    <button data-route="journal">Journal</button>
+    <button data-route="todo">To-do</button>
+    <button data-route="agent">Agent</button>
+  </div>
+  <div id="status" role="status"></div>
+
+  <h2>Recent</h2>
+  <ul id="recent"></ul>
+</main>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h1 style="font-size:18px">Settings</h1>
+    <label for="repo">Notebook repo</label>
+    <input id="repo" placeholder="owner/notebook" autocomplete="off">
+    <label for="token">GitHub token</label>
+    <input id="token" type="password" placeholder="github_pat_…" autocomplete="off">
+    <p class="hint">Fine-grained token with access to only this repo and <b>Issues: Read and write</b>. Stored only on this device.</p>
+    <div class="row">
+      <button value="cancel">Cancel</button>
+      <button value="save" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+  const cfg = () => ({ repo: store.get("tr.repo"), token: store.get("tr.token") });
+  const status = (msg, err = false) => { $("#status").textContent = msg; $("#status").className = err ? "err" : ""; };
+
+  async function gh(path, opts = {}) {
+    const { token } = cfg();
+    const res = await fetch(`https://api.github.com${path}`, {
+      ...opts,
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", ...(opts.headers || {}) },
+    });
+    if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.json().catch(() => ({}))).message || res.statusText}`);
+    return res.json();
+  }
+
+  async function send(route) {
+    const text = $("#text").value.trim();
+    if (!text) return;
+    const { repo, token } = cfg();
+    if (!repo || !token) { $("#settings").showModal(); return; }
+    const first = text.split("\n")[0];
+    const title = first.length > 80 ? first.slice(0, 79) + "…" : first;
+    const labels = ["inbox", ...(route ? [`route:${route}`] : [])];
+    document.querySelectorAll("button[data-route]").forEach((b) => (b.disabled = true));
+    status("Sending…");
+    try {
+      await gh(`/repos/${repo}/issues`, { method: "POST", body: JSON.stringify({ title, body: text, labels }) });
+      $("#text").value = "";
+      store.set("tr.draft", "");
+      status(route ? `Sent to ${route}.` : "Sent. Claude will route it.");
+      loadRecent();
+    } catch (e) {
+      status(e.message, true);
+    } finally {
+      document.querySelectorAll("button[data-route]").forEach((b) => (b.disabled = false));
+    }
+  }
+
+  function stateOf(issue) {
+    const names = issue.labels.map((l) => l.name);
+    if (names.includes("error")) return ["error", "error"];
+    if (names.includes("working")) return ["agent", "agent working…"];
+    for (const r of ["journal", "todo", "agent"]) if (names.includes(r)) return [r, issue.state === "closed" ? `${r} ✓` : `${r} · queued`];
+    return ["", "waiting for PC"];
+  }
+
+  async function loadRecent() {
+    const { repo, token } = cfg();
+    if (!repo || !token) return;
+    try {
+      const issues = await gh(`/repos/${repo}/issues?state=all&per_page=10&sort=created&direction=desc`);
+      $("#recent").innerHTML = "";
+      for (const i of issues.filter((i) => !i.pull_request)) {
+        const [cls, label] = stateOf(i);
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = i.html_url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        const t = document.createElement("div");
+        t.textContent = i.title;
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const tag = document.createElement("span");
+        tag.className = `tag ${cls}`;
+        tag.textContent = label;
+        const when = document.createElement("span");
+        when.textContent = new Date(i.created_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+        meta.append(tag, when);
+        a.append(t, meta);
+        li.append(a);
+        $("#recent").append(li);
+      }
+    } catch (e) {
+      status(e.message, true);
+    }
+  }
+
+  document.querySelectorAll("button[data-route]").forEach((b) => b.addEventListener("click", () => send(b.dataset.route)));
+  $("#text").value = store.get("tr.draft");
+  $("#text").addEventListener("input", (e) => store.set("tr.draft", e.target.value));
+  $("#openSettings").addEventListener("click", () => {
+    $("#repo").value = cfg().repo || "dolomitiinvestor/notebook";
+    $("#token").value = cfg().token;
+    $("#settings").showModal();
+  });
+  $("#settings").addEventListener("close", () => {
+    if ($("#settings").returnValue !== "save") return;
+    store.set("tr.repo", $("#repo").value.trim());
+    store.set("tr.token", $("#token").value.trim());
+    status("Saved.");
+    loadRecent();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadRecent(); });
+  loadRecent();
+  setInterval(() => { if (!document.hidden) loadRecent(); }, 30000);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>

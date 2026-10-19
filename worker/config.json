@@ -1,0 +1,11 @@
+{
+  "owner": "dolomitiinvestor",
+  "repo": "notebook",
+  "notebook_dir": "C:\\Users\\tvitu\\notebook",
+  "agent_dir": "C:\\Users\\tvitu\\agent-work",
+  "poll_seconds": 60,
+  "classify_model": "haiku",
+  "agent_model": "",
+  "agent_timeout_minutes": 30,
+  "allow_bash": false
+}
