@@ -84,6 +84,11 @@ def edit_labels(number, add=(), remove=()):
     run(args)
 
 
+def is_still_queued(number):
+    issue = json.loads(run([GH, "issue", "view", str(number), "-R", REPO, "--json", "state,labels"]))
+    return issue["state"] == "OPEN" and "agent" in labels_of(issue) and not labels_of(issue) & {"working", "error"}
+
+
 def comment(number, text):
     if len(text) > MAX_COMMENT:
         text = text[:MAX_COMMENT] + "\n\n…(truncated)"
@@ -224,9 +229,10 @@ def start_next_agent():
     if agent_busy.is_set():
         return None
     queued = [i for i in list_issues("agent") if is_mine(i) and not labels_of(i) & {"working", "error"}]
-    if not queued:
+    # Issue lists lag behind recent edits; re-check each candidate directly before starting it.
+    issue = next((i for i in queued if is_still_queued(i["number"])), None)
+    if not issue:
         return None
-    issue = queued[0]
     agent_busy.set()
     try:
         edit_labels(issue["number"], add=["working"])
